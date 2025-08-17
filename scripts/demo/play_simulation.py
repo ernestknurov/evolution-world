@@ -6,32 +6,29 @@ from src.evolution_world.agents import RandomAgent, RLAgent
 from src.evolution_world.training.configs.enums import Action
 from src.evolution_world.training.configs.config import EnvConfig, ScreenConfig, TrainingConfig
 
-WHITE = (255, 255, 255)
-LIGHT_GRAY = (200, 200, 200)
-GREEN = (0, 255, 0)
-RED = (255, 0, 0)
 
-def init_pygame() -> tuple[pygame.Surface, pygame.time.Clock, int]:
+def init_pygame() -> tuple[pygame.Surface, pygame.time.Clock]:
     pygame.init()
     screen_config = ScreenConfig()
     screen = pygame.display.set_mode((screen_config.width, screen_config.height))
     pygame.display.set_caption(screen_config.title)
-    screen.fill(WHITE)
     clock = pygame.time.Clock()
-    return screen, clock, screen_config.cell_size
-
+    return screen, clock
 
 if __name__ == "__main__":
-    screen, clock, CELL_SIZE = init_pygame()
-    env = GridWorld(cfg=EnvConfig(), render_mode='human', seed=42)
+    screen, clock = init_pygame()
+
+    env_config = EnvConfig()
     training_cfg = TrainingConfig()
+
     # agent = RandomAgent()
     agent = RLAgent(training_cfg.load_path)
+    env = GridWorld(cfg=env_config, render_mode='human')
 
-    obs, info = env.reset()
     done = False
-    control_mode = 'human' 
     running = True
+    control_mode = 'human' 
+    obs, info = env.reset()
 
     while running:
         for event in pygame.event.get():

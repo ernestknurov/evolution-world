@@ -1,20 +1,14 @@
 import pygame # type: ignore
+from pygame.locals import Color # type: ignore
 import numpy as np # type: ignore
 import gymnasium as gym # type: ignore
 from dataclasses import asdict
 from typing import Tuple, Dict, Any
+from pathlib import Path
 
 from src.evolution_world.training.configs.enums import Entity, Action
-from src.evolution_world.training.configs.config import EnvConfig, ScreenConfig, AgentState
+from src.evolution_world.training.configs.config import EnvConfig, ScreenConfig, AssetPaths, AgentState
 
-CELL_SIZE = ScreenConfig.cell_size
-WHITE = (255, 255, 255)
-LIGHT_GRAY = (180, 180, 180)  # Darker grid lines for better visibility
-GRAY = (150, 170, 190)          
-GREEN = (0, 150, 0)           # Bright green for energy - high contrast
-RED = (200, 50, 50)           # Keep red as is
-BLUE = (0, 100, 200)          # Bright blue for lifespan - high contrast  
-BLACK = (0, 0, 0)             # Pure black for maximum contrast
 
 class GridWorld(gym.Env):
     def __init__(self, cfg: EnvConfig, render_mode: str | None = None, seed: int | None = None):
@@ -233,77 +227,86 @@ class GridWorld(gym.Env):
         
         return self.get_observation(), reward, terminated, truncated, info
     
-    def render(self, screen):
+    def render(self, screen, screen_config: ScreenConfig=ScreenConfig(), asset_paths: AssetPaths=AssetPaths()):
+        cell_size = screen_config.cell_size
         if self.render_mode == 'human':
             # 1. Render the grid
-            screen.fill(WHITE)
-            for x in range(0, self.grid_size[1] * CELL_SIZE, CELL_SIZE):
-                pygame.draw.line(screen, LIGHT_GRAY, (x, 0), (x, self.grid_size[0] * CELL_SIZE))
-            for y in range(0, self.grid_size[0] * CELL_SIZE, CELL_SIZE):
-                pygame.draw.line(screen, LIGHT_GRAY, (0, y), (self.grid_size[1] * CELL_SIZE, y))
-
+            screen.fill(Color("gray"))
+            # 1.1 Fill the space for the inside of the grid
+            pygame.draw.rect(screen, Color("azure3"), 
+                             (self.padding * cell_size + 2, self.padding * cell_size + 2, 
+                              self.grid_size[1] * cell_size - 4, self.grid_size[0] * cell_size - 4))
+            
+            # 2. Objects on the grid.
             # in pygame (0,0) is the top left corner, same as in numpy
             # but the directions of x,y are swapped
             for x in range(self.padding, self.grid_size[0] + self.padding):
                 for y in range(self.padding, self.grid_size[1] + self.padding):
-                    # 2. Render the agents
-                    if self.agent_grid[x, y] == 1:
-                        agent_x, agent_y = x - self.padding, y - self.padding
-                        pygame.draw.circle(screen, GRAY, 
-                                            (agent_y * CELL_SIZE + CELL_SIZE // 2, 
-                                            agent_x * CELL_SIZE + CELL_SIZE // 2), 
-                                            CELL_SIZE // 2)
-                        self.render_state(screen)
-                    # 3. Render the resources
+                    # 2. Render the resources
                     if self.terrain[x, y] == 2:
-                        food_x, food_y = x - self.padding, y - self.padding
-                        pygame.draw.circle(screen, GREEN, 
-                                           (food_y * CELL_SIZE + CELL_SIZE // 2, 
-                                            food_x * CELL_SIZE + CELL_SIZE // 2), 
-                                           CELL_SIZE // 4)
+                        self.render_object(screen, asset_paths.food, (x, y), cell_size)
                     elif self.terrain[x, y] == 3:
-                        water_x, water_y = x - self.padding, y - self.padding
-                        pygame.draw.circle(screen, BLUE, 
-                                           (water_y * CELL_SIZE + CELL_SIZE // 2, 
-                                            water_x * CELL_SIZE + CELL_SIZE // 2), 
-                                           CELL_SIZE // 4)
-                    
+                        self.render_object(screen, asset_paths.water, (x, y), cell_size)
+                    # 3. Render the agents
+                    if self.agent_grid[x, y] == 1:
+                        self.render_state(screen, screen_config)
+                        self.render_object(screen, asset_paths.agent, (x, y), cell_size)
+
+            # 1.2 Draw the grid lines
+            for x in range(self.padding * cell_size, (self.grid_size[1] + self.padding) * cell_size, cell_size):
+                pygame.draw.line(screen, Color("azure4"), (x, self.padding * cell_size), (x, (self.grid_size[0] + self.padding) * cell_size), 2)
+            for y in range(self.padding * cell_size, (self.grid_size[0] + self.padding) * cell_size, cell_size):
+                pygame.draw.line(screen, Color("azure4"), (self.padding * cell_size, y), ((self.grid_size[1] + self.padding)* cell_size, y), 2)
+
+            # 1.3 Border rendering
+            pygame.draw.rect(screen, Color("black"), 
+                             (self.padding * cell_size, self.padding * cell_size, 
+                              self.grid_size[1] * cell_size, self.grid_size[0] * cell_size), 4)         
 
         else:
             raise NotImplementedError("Only 'human' render mode is implemented.")
-        
-    def render_state(self, screen):
+    def load_image(self, path: str | Path, size: tuple[int, int]) -> pygame.Surface:
+        """Load an image and scale it to the specified size."""
+        image = pygame.image.load(str(path))
+        return pygame.transform.scale(image, size)
 
-        font = pygame.font.Font(None, 16)  # Smaller font for compact display
+    def render_object(self, screen: pygame.Surface, image_path: str | Path, position: tuple[int, int], cell_size: int):
+        x, y = position
+        rect = pygame.Rect(y * cell_size, x * cell_size, cell_size, cell_size)
+        image = self.load_image(image_path, (cell_size, cell_size))
+        screen.blit(image, rect)
+        screen.blit(image, rect)
         
-        # Calculate center position of the agent's cell
-        cell_center_x = self.agent.position[1] * CELL_SIZE + CELL_SIZE // 2 - self.padding * CELL_SIZE
-        cell_center_y = self.agent.position[0] * CELL_SIZE + CELL_SIZE // 2 - self.padding * CELL_SIZE
+    def render_state(self, screen, screen_config: ScreenConfig):
+        """Render the agent's state (energy, food, water) on the screen."""
+        cell_size = screen_config.cell_size
         
-        # Display energy centered above cell center
-        energy_text = font.render(f'E:{self.agent.energy_level:.1f}', True, GREEN)
-        energy_rect = energy_text.get_rect()
-        energy_rect.centerx = cell_center_x
-        energy_rect.centery = cell_center_y - 10  # 16 pixels above center
-        screen.blit(energy_text, energy_rect)
+        # Energy bar (replaces energy text)
+        energy_ratio = self.agent.energy_level / self.cfg.agent.max_energy_level
+        bar_height = max(3, cell_size // 10)
+        bar_margin = 1
+        bar_width_full = cell_size - bar_margin * 2
+        filled_width = int(bar_width_full * energy_ratio)
+
+        bar_x = self.agent.position[1] * cell_size + bar_margin
+        bar_y = self.agent.position[0] * cell_size + bar_margin
+        pygame.draw.rect(screen, Color("gray20"), (bar_x, bar_y, bar_width_full, bar_height))
+        pygame.draw.rect(screen, Color("green"), (bar_x, bar_y, filled_width, bar_height))
+        pygame.draw.rect(screen, Color("black"), (bar_x, bar_y, bar_width_full, bar_height), 1)
         
-        # Display food level above energy
-        food_text = font.render(f'F:{self.agent.food_level:.1f}', True, RED)
-        food_rect = food_text.get_rect()
-        food_rect.centerx = cell_center_x
-        food_rect.centery = cell_center_y + 0   # 8 pixels above center
-        screen.blit(food_text, food_rect)
+        # Food bar (below energy)
+        food_ratio = self.agent.food_level / self.cfg.agent.max_food_level
+        food_bar_y = bar_y + bar_height + 1
+        food_filled_width = int(bar_width_full * food_ratio)
+        pygame.draw.rect(screen, Color("gray20"), (bar_x, food_bar_y, bar_width_full, bar_height))
+        pygame.draw.rect(screen, Color("red3"), (bar_x, food_bar_y, food_filled_width, bar_height))
+        pygame.draw.rect(screen, Color("black"), (bar_x, food_bar_y, bar_width_full, bar_height), 1)
+
+        # Water bar (below food)
+        water_ratio = self.agent.water_level / self.cfg.agent.max_water_level
+        water_bar_y = food_bar_y + bar_height + 1
+        water_filled_width = int(bar_width_full * water_ratio)
+        pygame.draw.rect(screen, Color("gray20"), (bar_x, water_bar_y, bar_width_full, bar_height))
+        pygame.draw.rect(screen, Color("dodgerblue3"), (bar_x, water_bar_y, water_filled_width, bar_height))
+        pygame.draw.rect(screen, Color("black"), (bar_x, water_bar_y, bar_width_full, bar_height), 1)
         
-        # Display water level below cell center
-        water_text = font.render(f'W:{self.agent.water_level:.1f}', True, BLUE)
-        water_rect = water_text.get_rect()
-        water_rect.centerx = cell_center_x
-        water_rect.centery = cell_center_y + 10  # 8 pixels below center
-        screen.blit(water_text, water_rect)
-        
-        # # Display lifespan centered below water level
-        # lifespan_text = font.render(f'L:{self.agent.lifespan}', True, BLACK)
-        # lifespan_rect = lifespan_text.get_rect()
-        # lifespan_rect.centerx = cell_center_x
-        # lifespan_rect.centery = cell_center_y + 10  # 16 pixels below center
-        # screen.blit(lifespan_text, lifespan_rect)

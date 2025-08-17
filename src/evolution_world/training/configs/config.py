@@ -1,19 +1,42 @@
 # src/evolution_world/envs/configs.py
 from dataclasses import dataclass, field
 from typing import Dict
-
-@dataclass
-class ScreenConfig:
-    width: int = 1200
-    height: int = 1000
-    cell_size: int = 40
-    title: str = "Evolution World"
+from pathlib import Path
 
 @dataclass
 class MapConfig:
-    width: int = 30
-    height: int = 25
+    width: int = 20
+    height: int = 10
 
+@dataclass
+class ScreenConfig:
+    screen_resolution: tuple[int, int] = (1800, 1000)  # (max_width_px, max_height_px)
+    padding: int = 2        # border (in cells) around the map
+    map: MapConfig = field(default_factory=MapConfig)
+    max_cell_size: int = 50
+
+    # Derived fields (pixels)
+    cell_size: int = field(init=False)
+    width: int = field(init=False)   # total width in pixels (including padding)
+    height: int = field(init=False)
+    title: str = "Evolution World"
+
+    def __post_init__(self):
+        max_w, max_h = self.screen_resolution
+        # Max cell size that still fits horizontally / vertically
+        cell_size_w = max_w // (self.map.width + 2 * self.padding)
+        cell_size_h = max_h // (self.map.height + 2 * self.padding)
+        self.cell_size = min(cell_size_w, cell_size_h, self.max_cell_size)
+        self.width = (self.map.width + 2 * self.padding) * self.cell_size
+        self.height = (self.map.height + 2 * self.padding) * self.cell_size
+    
+@dataclass
+class AssetPaths:
+    assets_root: Path=Path("assets/images")    
+    food: Path=assets_root / "food.png"
+    water: Path=assets_root / "water.png"
+    agent: Path=assets_root / "agent.png"
+    
 @dataclass
 class ResourceConfig:
     rate: float  # probability per tick of regeneration
