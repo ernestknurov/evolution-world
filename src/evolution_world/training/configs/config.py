@@ -6,7 +6,7 @@ from pathlib import Path
 @dataclass
 class MapConfig:
     width: int = 20
-    height: int = 10
+    height: int = 16
 
 @dataclass
 class ScreenConfig:
@@ -36,7 +36,7 @@ class AssetPaths:
     food: Path=assets_root / "food.png"
     water: Path=assets_root / "water.png"
     agent: Path=assets_root / "agent.png"
-    
+
 @dataclass
 class ResourceConfig:
     rate: float  # probability per tick of regeneration
@@ -98,12 +98,13 @@ class EnvConfig:
     map: MapConfig = field(default_factory=MapConfig)
     resources: Dict[int, ResourceConfig] = field(
         default_factory=lambda: {
-            1: ResourceConfig(rate=0.025, max_per_tile=1),  # FOOD
-            2: ResourceConfig(rate=0.05, max_per_tile=1),  # WATER
+            1: ResourceConfig(rate=0.075, max_per_tile=1),  # FOOD
+            2: ResourceConfig(rate=0.150, max_per_tile=1),  # WATER
         }
     )
     agent: AgentConfig = field(default_factory=AgentConfig)
     rewards: RewardConfig = field(default_factory=RewardConfig)
+    num_agents: int = 10  # Number of agents in the environment
 
 @dataclass
 class TrainingConfig:

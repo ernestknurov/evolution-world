@@ -1,7 +1,7 @@
 import pygame # type: ignore
 from pygame.locals import * # type: ignore
 
-from src.evolution_world.envs.grid_world import GridWorld
+from src.evolution_world.envs.multi_agent import MultiAgentGridWorld
 from src.evolution_world.agents import RandomAgent, RLAgent
 from src.evolution_world.training.configs.enums import Action
 from src.evolution_world.training.configs.config import EnvConfig, ScreenConfig, TrainingConfig
@@ -16,16 +16,19 @@ def init_pygame() -> tuple[pygame.Surface, pygame.time.Clock]:
     return screen, clock
 
 if __name__ == "__main__":
+
+    VERBOSE = False
     screen, clock = init_pygame()
 
     env_config = EnvConfig()
     training_cfg = TrainingConfig()
 
-    # agent = RandomAgent()
-    agent = RLAgent(training_cfg.load_path)
-    env = GridWorld(cfg=env_config, render_mode='human')
+    agent = RandomAgent()
+    # agent = RLAgent(training_cfg.load_path)
+    env = MultiAgentGridWorld(cfg=env_config, render_mode='human')
 
-    done = False
+    step = 0
+    done = {agent_id: False for agent_id in env.agents.keys()}
     running = True
     control_mode = 'human' 
     obs, info = env.reset()
@@ -45,26 +48,36 @@ if __name__ == "__main__":
                 if control_mode == 'human':
                     # Agent takes action based on its policy
                     if event.key == K_ESCAPE: # type: ignore
-                        done = True
+                        running = False
                         continue
                     elif event.key == K_SPACE: # type: ignore
-                        if done:
+                        if any(done.values()):
                             obs, info = env.reset()
-                            done = False
-                        action = agent.act(obs)
-                        obs, reward, done, truncated, info = env.step(action)
-                        print(f"Action: {Action(action)}, Reward: {reward}, position: {info['agent_state']['position']}")
+                            done = {agent_id: False for agent_id in env.agents.keys()}
+                            step = 0
+                        actions = {agent_id: agent.act(ob) for agent_id, ob in obs.items()}
+                        obs, reward, done, truncated, info = env.step(actions)
+                        step += 1
+                        print(f"Step: {step}")
+                        if VERBOSE:
+                            for agent_id in obs.keys():
+                                print(f"    Agent_id: {agent_id}, Action: {Action(actions[agent_id])}, Reward: {reward[agent_id]}, position: {info['agent_states'][agent_id]['position']}")
 
         if control_mode == 'agent':
-            if done:
+            if any(done.values()):
                 obs, info = env.reset()
-                done = False
-            action = agent.act(obs)
-            obs, reward, done, truncated, info = env.step(action)
-            print(f"Action: {Action(action)}, Reward: {reward}, position: {info['agent_state']['position']}")
+                done = {agent_id: False for agent_id in env.agents.keys()}
+                step = 0
+            actions = {agent_id: agent.act(ob) for agent_id, ob in obs.items()}
+            obs, reward, done, truncated, info = env.step(actions)
+            step += 1
+            if VERBOSE:
+                print(f"Step: {step}")
+                for agent_id in obs.keys():
+                    print(f"    Agent_id: {agent_id}, Action: {Action(actions[agent_id])}, Reward: {reward[agent_id]}, position: {info['agent_states'][agent_id]['position']}")
         # Render outside the event loop so it happens every frame
         env.render(screen)
         pygame.display.update()  # Update the display
-        clock.tick(10)  # Limit to 10 FPS for demo purposes instead of using delay
+        clock.tick(60)  # Limit to 10 FPS for demo purposes instead of using delay
 
     pygame.quit()
