@@ -39,6 +39,9 @@ class GridWorld(gym.Env):
             Action.EAT: np.array([0, 0]),    # Eat (no movement)
             Action.DRINK: np.array([0, 0])   # Drink (no movement)
         }
+        self._image_cache = {}
+        self._font = None
+        self._screen_config = None
         self.reset()
 
     def reset(self, seed: int | None = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
@@ -229,6 +232,7 @@ class GridWorld(gym.Env):
     
     def render(self, screen, screen_config: ScreenConfig=ScreenConfig(), asset_paths: AssetPaths=AssetPaths()):
         cell_size = screen_config.cell_size
+        self._load_and_cache_assets(screen_config, asset_paths)
         if self.render_mode == 'human':
             # 1. Render the grid
             screen.fill(Color("gray"))
@@ -244,13 +248,13 @@ class GridWorld(gym.Env):
                 for y in range(self.padding, self.grid_size[1] + self.padding):
                     # 2. Render the resources
                     if self.terrain[x, y] == 2:
-                        self.render_object(screen, asset_paths.food, (x, y), cell_size)
+                        self.render_object_cached(screen, "food", (x, y), cell_size)
                     elif self.terrain[x, y] == 3:
-                        self.render_object(screen, asset_paths.water, (x, y), cell_size)
+                        self.render_object_cached(screen, "water", (x, y), cell_size)
                     # 3. Render the agents
                     if self.agent_grid[x, y] == 1:
                         self.render_state(screen, screen_config)
-                        self.render_object(screen, asset_paths.agent, (x, y), cell_size)
+                        self.render_object_cached(screen, "agent", (x, y), cell_size)
 
             # 1.2 Draw the grid lines
             for x in range(self.padding * cell_size, (self.grid_size[1] + self.padding) * cell_size, cell_size):
@@ -265,17 +269,33 @@ class GridWorld(gym.Env):
 
         else:
             raise NotImplementedError("Only 'human' render mode is implemented.")
-    def load_image(self, path: str | Path, size: tuple[int, int]) -> pygame.Surface:
+        
+    def _load_and_cache_assets(self, screen_config: ScreenConfig, asset_paths: AssetPaths):
+        """Load and cache all assets once"""
+        if self._screen_config != screen_config:
+            self._screen_config = screen_config
+            cell_size = screen_config.cell_size
+            
+            # Cache scaled images
+            self._image_cache = {
+                'food': self._load_image(asset_paths.food, (cell_size, cell_size)),
+                'water': self._load_image(asset_paths.water, (cell_size, cell_size)),
+                'agent': self._load_image(asset_paths.agent, (cell_size, cell_size))
+            }
+            
+            # Cache font
+            self._font = pygame.font.Font(None, 16)
+    
+    def _load_image(self, path: str | Path, size: tuple[int, int]) -> pygame.Surface:
         """Load an image and scale it to the specified size."""
         image = pygame.image.load(str(path))
         return pygame.transform.scale(image, size)
 
-    def render_object(self, screen: pygame.Surface, image_path: str | Path, position: tuple[int, int], cell_size: int):
+    def render_object_cached(self, screen: pygame.Surface, image_key: str, position: tuple[int, int], cell_size: int):
+        """Render using cached images"""
         x, y = position
         rect = pygame.Rect(y * cell_size, x * cell_size, cell_size, cell_size)
-        image = self.load_image(image_path, (cell_size, cell_size))
-        screen.blit(image, rect)
-        screen.blit(image, rect)
+        screen.blit(self._image_cache[image_key], rect)
         
     def render_state(self, screen, screen_config: ScreenConfig):
         """Render the agent's state (energy, food, water) on the screen."""
