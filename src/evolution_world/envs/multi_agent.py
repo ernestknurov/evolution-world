@@ -26,7 +26,7 @@ class MultiAgentGridWorld(gym.Env):
         self.observation_space = gym.spaces.Dict({
             'vision': gym.spaces.Box(low=0, high=1, shape=(self.cfg.agent.vision_radius * 2 + 1, 
                                                            self.cfg.agent.vision_radius * 2 + 1, 
-                                                           self.n_entities + 1), dtype=np.int8),
+                                                           self.n_entities + 2), dtype=np.int8),
             'self': gym.spaces.Box(low=0, high=1, shape=(4,), dtype=np.float32),  # energy, lifespan
             'action_mask': gym.spaces.Box(low=0, high=1, shape=(self.n_actions,), dtype=np.int8),
         })

@@ -2,11 +2,12 @@ import numpy as np # type: ignore
 
 from stable_baselines3 import PPO # type: ignore
 from stable_baselines3.common.evaluation import evaluate_policy # type: ignore
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv # type: ignore
-from stable_baselines3.common.monitor import Monitor # type: ignore
+from stable_baselines3.common.vec_env import VecMonitor # type: ignore
  
 from src.evolution_world.utils import LogFactory
 from src.evolution_world.envs.grid_world import GridWorld
+from src.evolution_world.envs.multi_agent import MultiAgentGridWorld
+from src.evolution_world.envs.wrappers.multi_agent_vec_env import MultiAgentVecEnv
 from src.evolution_world.training.configs.config import EnvConfig, TrainingConfig
 
 logger = LogFactory.get_logger(__name__)
@@ -19,12 +20,12 @@ class RLAgent:
         else:
             self.model = None
 
-    def train(self, cfg: TrainingConfig, callback=None):
-        print(f"Training model for {cfg.total_timesteps} timesteps on environment GridWorld")
-        def make_env():
-            return lambda: Monitor(GridWorld(cfg=EnvConfig(), seed=42))
-
-        self.vec_env = SubprocVecEnv([make_env() for _ in range(cfg.num_envs)])
+    def train(self, cfg: TrainingConfig, env_cfg: EnvConfig, callback=None):
+        logger.info(f"Training model for {cfg.total_timesteps} timesteps on environment MultiAgentGridWorld")
+        # Option B: single core world, agents become vectorized slots
+        core = MultiAgentGridWorld(cfg=env_cfg, seed=None)
+        base_vec = MultiAgentVecEnv(core)
+        self.vec_env = VecMonitor(base_vec, filename=None)
         
         policy_kwargs = {
             "net_arch": cfg.net_arch,
@@ -37,25 +38,23 @@ class RLAgent:
                 verbose=1,
                 policy_kwargs=policy_kwargs,
                     # === rollout / batch settings ===
-                n_steps=512,          # 512×8 = 4 096 samples per update
-                batch_size=256,       # 4 096/256 = 16 minibatches per epoch
-                n_epochs=10,          # 16×10 = 160 gradient steps per update
+                n_steps=512,          # 512×num_agents samples per update
+                batch_size=256,
+                n_epochs=10,
 
                 # === optimization ===
-                learning_rate=3e-4,   # default "3e-4" works well for ~10⁵ parameters
-                clip_range=0.2,       # PPO clipping ε
-                gamma=0.99,           # discount factor
-                gae_lambda=0.95,      # GAE smoothing
+                learning_rate=3e-4,
+                clip_range=0.2,
+                gamma=0.99,
+                gae_lambda=0.95,
 
                 # === losses / regularization ===
-                ent_coef=0.0,         # you can raise to ~1e-2 if you need more exploration
-                vf_coef=0.5,          # value function loss weight
-                max_grad_norm=0.5     # gradient clipping
-                
+                ent_coef=0.0,
+                vf_coef=0.5,
+                max_grad_norm=0.5                
             )
         else:
             logger.info("Using loaded model, setting environment for continued training")
-            # Set the environment for the loaded model
             self.model.set_env(self.vec_env)
 
         # Debug: Print model architecture

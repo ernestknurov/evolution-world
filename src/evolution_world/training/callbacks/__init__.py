@@ -1,1 +1,2 @@
 from .wandb_callback import WandbCallback
+from .multi_agent_wandb_callback import MultiAgentWandbCallback

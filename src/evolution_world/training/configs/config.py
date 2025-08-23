@@ -108,17 +108,18 @@ class EnvConfig:
 
 @dataclass
 class TrainingConfig:
-    total_timesteps: int = 500_000
-    num_envs: int = 4
+    num_envs: int = 10 # equal to the number of agents
+    max_steps: int = 1000
+    total_timesteps: int = 300_000
     net_arch: Dict[str, list[int]] = field(default_factory=lambda: {
         "pi": [64, 64],
         "vf": [64, 64]
     })
     from_loaded_model: bool = False
-    load_path: str = "models/trained_model"
-    save_path: str = "models/trained_model.zip"
+    load_path: str = "models/multi_agent_trained_model"
+    save_path: str = "models/multi_agent_trained_model.zip"
 
 @dataclass
 class WandbConfig:
     project_name: str = "evolution_world"
-    run_name: str = "pilot_run10"
+    run_name: str = "run3"
